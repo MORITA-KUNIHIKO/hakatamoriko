@@ -142,7 +142,8 @@
     const input = document.getElementById("task-input");
     const list = document.getElementById("task-list");
 
-    const STORAGE_KEY = "nytool-tasks";
+    const STORAGE_KEY = "mytool-tasks";
+    const OLD_STORAGE_KEY = "nytool-tasks"; // 以前の保存名（引き継ぎ用）
 
     // タスクの一覧（例：{ text: "牛乳を買う", done: false }）
     let tasks = loadTasks();
@@ -150,7 +151,16 @@
     // ブラウザに保存されたタスクを読み込む
     function loadTasks() {
       try {
-        const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+        // 新しい保存名にデータがなければ、以前の保存名から引き継ぐ
+        let raw = localStorage.getItem(STORAGE_KEY);
+        if (raw === null) {
+          raw = localStorage.getItem(OLD_STORAGE_KEY);
+          if (raw !== null) {
+            localStorage.setItem(STORAGE_KEY, raw);
+            localStorage.removeItem(OLD_STORAGE_KEY);
+          }
+        }
+        const saved = JSON.parse(raw);
         return Array.isArray(saved) ? saved : [];
       } catch (error) {
         return [];
