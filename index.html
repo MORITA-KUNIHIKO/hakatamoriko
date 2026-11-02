@@ -4,234 +4,49 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>わたしのタスク管理</title>
-  <style>
-    * {
-      box-sizing: border-box;
-    }
-
-    body {
-      margin: 0;
-      font-family: "Hiragino Sans", "Yu Gothic UI", "Meiryo", sans-serif;
-      font-size: 20px;
-      background: #f5f5f5;
-      color: #222;
-    }
-
-    .container {
-      max-width: 640px;
-      margin: 48px auto;
-      padding: 0 16px;
-    }
-
-    h1 {
-      font-size: 36px;
-      margin-bottom: 24px;
-    }
-
-    .task-form {
-      display: flex;
-      gap: 12px;
-    }
-
-    .task-form input {
-      flex: 1;
-      padding: 14px 16px;
-      font-size: 22px;
-      border: 2px solid #ccc;
-      border-radius: 8px;
-    }
-
-    .task-form input:focus {
-      outline: none;
-      border-color: #3b82f6;
-    }
-
-    .task-form button {
-      padding: 14px 24px;
-      font-size: 22px;
-      color: #fff;
-      background: #3b82f6;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-    }
-
-    .task-form button:hover {
-      background: #2563eb;
-    }
-
-    .task-list {
-      list-style: none;
-      padding: 0;
-      margin-top: 28px;
-    }
-
-    .task-list li {
-      padding: 16px 20px;
-      margin-bottom: 10px;
-      font-size: 22px;
-      background: #fff;
-      border-radius: 8px;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-      word-break: break-word;
-    }
-
-    .task-list li {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .task-list label {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      cursor: pointer;
-    }
-
-    .delete-button {
-      flex-shrink: 0;
-      padding: 8px 16px;
-      font-size: 18px;
-      color: #dc2626;
-      background: #fff;
-      border: 2px solid #dc2626;
-      border-radius: 8px;
-      cursor: pointer;
-    }
-
-    .delete-button:hover {
-      color: #fff;
-      background: #dc2626;
-    }
-
-    .task-list input[type="checkbox"] {
-      width: 26px;
-      height: 26px;
-      flex-shrink: 0;
-      cursor: pointer;
-    }
-
-    .task-list li.done span {
-      text-decoration: line-through;
-      color: #999;
-    }
-  </style>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <main class="container">
-    <h1>わたしのタスク管理</h1>
+    <header class="header">
+      <h1>わたしのタスク管理</h1>
+      <div id="user-bar" class="user-bar" hidden>
+        <span id="user-email"></span>
+        <button type="button" id="logout-button" class="sub-button">ログアウト</button>
+      </div>
+    </header>
 
-    <form id="task-form" class="task-form">
-      <input
-        type="text"
-        id="task-input"
-        placeholder="タスクを入力"
-        autocomplete="off"
-        required
-      >
-      <button type="submit">追加</button>
-    </form>
+    <p id="message" class="message" hidden></p>
 
-    <ul id="task-list" class="task-list"></ul>
+    <!-- ログイン画面 -->
+    <section id="auth-section" hidden>
+      <form id="auth-form" class="auth-form">
+        <input type="email" id="auth-email" placeholder="メールアドレス" autocomplete="email" required>
+        <input type="password" id="auth-password" placeholder="パスワード（6文字以上）" autocomplete="current-password" minlength="6" required>
+        <div class="auth-buttons">
+          <button type="submit" class="main-button">ログイン</button>
+          <button type="button" id="signup-button" class="sub-button">新規登録</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- タスク画面 -->
+    <section id="app-section" hidden>
+      <form id="task-form" class="task-form">
+        <input
+          type="text"
+          id="task-input"
+          placeholder="タスクを入力"
+          autocomplete="off"
+          required
+        >
+        <button type="submit">追加</button>
+      </form>
+
+      <ul id="task-list" class="task-list"></ul>
+    </section>
   </main>
 
-  <script>
-    const form = document.getElementById("task-form");
-    const input = document.getElementById("task-input");
-    const list = document.getElementById("task-list");
-
-    const STORAGE_KEY = "mytool-tasks";
-    const OLD_STORAGE_KEY = "nytool-tasks"; // 以前の保存名（引き継ぎ用）
-
-    // タスクの一覧（例：{ text: "牛乳を買う", done: false }）
-    let tasks = loadTasks();
-
-    // ブラウザに保存されたタスクを読み込む
-    function loadTasks() {
-      try {
-        // 新しい保存名にデータがなければ、以前の保存名から引き継ぐ
-        let raw = localStorage.getItem(STORAGE_KEY);
-        if (raw === null) {
-          raw = localStorage.getItem(OLD_STORAGE_KEY);
-          if (raw !== null) {
-            localStorage.setItem(STORAGE_KEY, raw);
-            localStorage.removeItem(OLD_STORAGE_KEY);
-          }
-        }
-        const saved = JSON.parse(raw);
-        return Array.isArray(saved) ? saved : [];
-      } catch (error) {
-        return [];
-      }
-    }
-
-    // 今のタスク一覧をブラウザに保存する
-    function saveTasks() {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
-      } catch (error) {
-        // 保存できない環境でも画面の操作は続けられるようにする
-      }
-    }
-
-    // タスク一覧を画面に表示し直す
-    function render() {
-      list.innerHTML = "";
-
-      tasks.forEach((task, index) => {
-        // タスク1件分：チェックボックス＋タスク名＋削除ボタン
-        const item = document.createElement("li");
-        item.classList.toggle("done", task.done);
-
-        const label = document.createElement("label");
-
-        const checkbox = document.createElement("input");
-        checkbox.type = "checkbox";
-        checkbox.checked = task.done;
-        checkbox.addEventListener("change", () => {
-          task.done = checkbox.checked;
-          saveTasks();
-          render();
-        });
-
-        const span = document.createElement("span");
-        span.textContent = task.text;
-
-        const deleteButton = document.createElement("button");
-        deleteButton.type = "button";
-        deleteButton.className = "delete-button";
-        deleteButton.textContent = "削除";
-        deleteButton.addEventListener("click", () => {
-          tasks.splice(index, 1);
-          saveTasks();
-          render();
-        });
-
-        label.appendChild(checkbox);
-        label.appendChild(span);
-        item.appendChild(label);
-        item.appendChild(deleteButton);
-        list.appendChild(item);
-      });
-    }
-
-    form.addEventListener("submit", (event) => {
-      event.preventDefault();
-
-      const text = input.value.trim();
-      if (text === "") return;
-
-      tasks.push({ text: text, done: false });
-      saveTasks();
-      render();
-
-      input.value = "";
-      input.focus();
-    });
-
-    render();
-  </script>
+  <script type="module" src="script.js"></script>
 </body>
 </html>
