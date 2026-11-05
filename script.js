@@ -15,13 +15,18 @@ const signupButton = document.getElementById("signup-button");
 const appSection = document.getElementById("app-section");
 const form = document.getElementById("task-form");
 const input = document.getElementById("task-input");
+const dateInput = document.getElementById("task-date");
 const list = document.getElementById("task-list");
 
 // 以前ブラウザ内に保存していたタスク（ログイン時にクラウドへ引き継ぐ）
 const LOCAL_STORAGE_KEYS = ["mytool-tasks", "nytool-tasks"];
 
 let supabase = null;
-// タスクの一覧（例：{ id: 1, text: "牛乳を買う", done: false }）
+// Google カレンダーに予定を送る先（GAS のウェブアプリ）と合言葉。.env から読み込む
+let gasUrl = "";
+let gasSecret = "";
+// タスクの一覧（例：{ id: 1, text: "牛乳を買う", done: false, due_date: "2026-11-05" }）
+// due_date は日付がないときは null
 let tasks = [];
 
 // ---------- メッセージ表示 ----------
@@ -127,7 +132,7 @@ logoutButton.addEventListener("click", async () => {
 async function fetchTasks() {
   const { data, error } = await supabase
     .from("tasks")
-    .select("id, text, done")
+    .select("id, text, done, due_date")
     .order("created_at", { ascending: true });
 
   if (error) {
@@ -169,11 +174,12 @@ async function importLocalTasks() {
   showMessage(`以前のタスク ${rows.length} 件をクラウドに引き継ぎました。`);
 }
 
-async function addTask(text) {
+// dueDate は "2026-11-05" の形。日付を選んでいなければ空文字
+async function addTask(text, dueDate) {
   const { data, error } = await supabase
     .from("tasks")
-    .insert({ text: text })
-    .select("id, text, done")
+    .insert({ text: text, due_date: dueDate || null })
+    .select("id, text, done, due_date")
     .single();
 
   if (error) {
@@ -182,7 +188,36 @@ async function addTask(text) {
   }
   tasks.push(data);
   render();
+  // カレンダーへの送信は待たない（失敗してもタスクの追加には影響しない）
+  sendToCalendar(data.text, data.due_date);
   return true;
+}
+
+// 今日の日付を "2026-11-05" の形で返す
+function todayString() {
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
+// GAS に送って、Google カレンダーに終日予定を作る。日付がなければ今日の予定にする
+async function sendToCalendar(title, dueDate) {
+  if (!gasUrl || !gasSecret) return; // .env に設定がなければ何もしない
+
+  try {
+    const response = await fetch(gasUrl, {
+      method: "POST",
+      // text/plain にすると、ブラウザの事前確認（CORS）で止められない
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ title: title, date: dueDate || todayString(), secret: gasSecret }),
+    });
+    const result = (await response.text()).trim();
+    if (!response.ok || result !== "ok") {
+      throw new Error(result || `HTTP ${response.status}`);
+    }
+  } catch (error) {
+    showMessage("タスクは追加しましたが、カレンダーには登録できませんでした：" + error.message, true);
+  }
 }
 
 async function updateTask(task, done) {
@@ -207,6 +242,13 @@ async function deleteTask(task) {
 
 // ---------- 表示 ----------
 
+// "2026-11-05" → "11/5"（今年でなければ "2027/1/5"）
+function formatDate(value) {
+  const [year, month, day] = value.split("-").map(Number);
+  const md = `${month}/${day}`;
+  return year === new Date().getFullYear() ? md : `${year}/${md}`;
+}
+
 // タスク一覧を画面に表示し直す
 function render() {
   list.innerHTML = "";
@@ -229,6 +271,17 @@ function render() {
     const span = document.createElement("span");
     span.textContent = task.text;
 
+    label.appendChild(checkbox);
+    label.appendChild(span);
+
+    if (task.due_date) {
+      const date = document.createElement("time");
+      date.className = "task-date";
+      date.dateTime = task.due_date;
+      date.textContent = formatDate(task.due_date);
+      label.appendChild(date);
+    }
+
     const deleteButton = document.createElement("button");
     deleteButton.type = "button";
     deleteButton.className = "delete-button";
@@ -238,8 +291,6 @@ function render() {
       deleteTask(task);
     });
 
-    label.appendChild(checkbox);
-    label.appendChild(span);
     item.appendChild(label);
     item.appendChild(deleteButton);
     list.appendChild(item);
@@ -254,10 +305,13 @@ form.addEventListener("submit", async (event) => {
 
   const button = form.querySelector("button");
   button.disabled = true;
-  const ok = await addTask(text);
+  const ok = await addTask(text, dateInput.value);
   button.disabled = false;
 
-  if (ok) input.value = "";
+  if (ok) {
+    input.value = "";
+    dateInput.value = "";
+  }
   input.focus();
 });
 
@@ -281,6 +335,8 @@ async function start() {
   }
 
   supabase = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY);
+  gasUrl = env.VITE_GAS_URL || "";
+  gasSecret = env.VITE_GAS_SECRET || "";
 
   // ログイン状態が変わるたびに画面を切り替える
   let currentUserId = null;
