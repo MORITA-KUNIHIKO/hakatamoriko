@@ -323,7 +323,7 @@ async function start() {
     env = await loadEnv();
   } catch (error) {
     showMessage(
-      ".env を読み込めませんでした。ファイルを直接開かず、ローカルサーバー経由（例：python -m http.server）で開いてください。",
+      ".env を読み込めませんでした。フォルダの中の start.bat をダブルクリックして開いてください（または http://127.0.0.1:8000/ を開く）。",
       true
     );
     return;
