@@ -1,10 +1,12 @@
 import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm";
+import { SUPABASE_URL, SUPABASE_ANON_KEY, GAS_URL } from "./config.js?v=4";
 
 // 画面の部品
 const message = document.getElementById("message");
 const userBar = document.getElementById("user-bar");
 const userEmail = document.getElementById("user-email");
 const logoutButton = document.getElementById("logout-button");
+const calendarButton = document.getElementById("calendar-button");
 
 const authSection = document.getElementById("auth-section");
 const authForm = document.getElementById("auth-form");
@@ -21,10 +23,10 @@ const list = document.getElementById("task-list");
 // 以前ブラウザ内に保存していたタスク（ログイン時にクラウドへ引き継ぐ）
 const LOCAL_STORAGE_KEYS = ["mytool-tasks", "nytool-tasks"];
 
+// カレンダー連携の合言葉を、このブラウザの中に保存するときの名前
+const GAS_SECRET_KEY = "mytool-gas-secret";
+
 let supabase = null;
-// Google カレンダーに予定を送る先（GAS のウェブアプリ）と合言葉。.env から読み込む
-let gasUrl = "";
-let gasSecret = "";
 // タスクの一覧（例：{ id: 1, text: "牛乳を買う", done: false, due_date: "2026-11-05" }）
 // due_date は日付がないときは null
 let tasks = [];
@@ -41,34 +43,42 @@ function hideMessage() {
   message.hidden = true;
 }
 
-// ---------- .env の読み込み ----------
+// ---------- カレンダー連携の合言葉（端末ごとに保存） ----------
 
-// .env を直接読み込んで { キー: 値 } の形にする
-async function loadEnv() {
-  const response = await fetch("./.env", { cache: "no-store" });
-  if (!response.ok) {
-    throw new Error(`サーバーの返事 ${response.status}`);
+function getGasSecret() {
+  try {
+    return localStorage.getItem(GAS_SECRET_KEY) || "";
+  } catch (error) {
+    return "";
   }
-
-  const env = {};
-  const lines = (await response.text()).split(/\r?\n/);
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed === "" || trimmed.startsWith("#")) continue;
-
-    const eq = trimmed.indexOf("=");
-    if (eq === -1) continue;
-
-    const key = trimmed.slice(0, eq).trim();
-    let value = trimmed.slice(eq + 1).trim();
-    // "値" や '値' のように囲まれていたら外す
-    if (/^(["']).*\1$/.test(value)) {
-      value = value.slice(1, -1);
-    }
-    env[key] = value;
-  }
-  return env;
 }
+
+function updateCalendarButton() {
+  calendarButton.textContent = getGasSecret() ? "カレンダー連携：オン" : "カレンダー連携：オフ";
+}
+
+calendarButton.addEventListener("click", () => {
+  const current = getGasSecret();
+  const input = window.prompt(
+    "カレンダー連携の合言葉を入力してください。\n（このブラウザの中だけに保存されます。空にして OK を押すと連携をやめます）",
+    current
+  );
+  if (input === null) return; // キャンセル
+
+  try {
+    const secret = input.trim();
+    if (secret) {
+      localStorage.setItem(GAS_SECRET_KEY, secret);
+      showMessage("カレンダー連携をオンにしました。これから追加するタスクがカレンダーにも入ります。");
+    } else {
+      localStorage.removeItem(GAS_SECRET_KEY);
+      showMessage("カレンダー連携をオフにしました。");
+    }
+  } catch (error) {
+    showMessage("このブラウザでは合言葉を保存できませんでした。", true);
+  }
+  updateCalendarButton();
+});
 
 // ---------- 画面の切り替え ----------
 
@@ -202,14 +212,15 @@ function todayString() {
 
 // GAS に送って、Google カレンダーに終日予定を作る。日付がなければ今日の予定にする
 async function sendToCalendar(title, dueDate) {
-  if (!gasUrl || !gasSecret) return; // .env に設定がなければ何もしない
+  const secret = getGasSecret();
+  if (!GAS_URL || !secret) return; // 合言葉が入っていない端末では何もしない
 
   try {
-    const response = await fetch(gasUrl, {
+    const response = await fetch(GAS_URL, {
       method: "POST",
       // text/plain にすると、ブラウザの事前確認（CORS）で止められない
       headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ title: title, date: dueDate || todayString(), secret: gasSecret }),
+      body: JSON.stringify({ title: title, date: dueDate || todayString(), secret: secret }),
     });
     const result = (await response.text()).trim();
     if (!response.ok || result !== "ok") {
@@ -317,26 +328,9 @@ form.addEventListener("submit", async (event) => {
 
 // ---------- 起動 ----------
 
-async function start() {
-  let env;
-  try {
-    env = await loadEnv();
-  } catch (error) {
-    showMessage(
-      ".env を読み込めませんでした（" + error.message + "）。フォルダの中の start.bat をダブルクリックして開いてください（または http://127.0.0.1:8000/ を開く）。",
-      true
-    );
-    return;
-  }
-
-  if (!env.SUPABASE_URL || !env.SUPABASE_ANON_KEY) {
-    showMessage(".env に SUPABASE_URL と SUPABASE_ANON_KEY を入力してください。", true);
-    return;
-  }
-
-  supabase = createClient(env.SUPABASE_URL, env.SUPABASE_ANON_KEY);
-  gasUrl = env.VITE_GAS_URL || "";
-  gasSecret = env.VITE_GAS_SECRET || "";
+function start() {
+  supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  updateCalendarButton();
 
   // ログイン状態が変わるたびに画面を切り替える
   let currentUserId = null;
