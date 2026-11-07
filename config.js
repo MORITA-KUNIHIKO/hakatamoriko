@@ -6,6 +6,6 @@ export const SUPABASE_URL = "https://hnizwicvpmkggsppwbbh.supabase.co";
 export const SUPABASE_ANON_KEY = "sb_publishable_qWWPg93NVJNjjtFVACYyaQ_CE32ariz";
 
 // Google カレンダーに予定を送る先（GAS のウェブアプリ）
-// GAS 側でログイン中の本人かどうかを確かめるので、URL が知られても他人は予定を作れない
+// 合言葉はログインした本人の Supabase のユーザー情報にあるので、URL が知られても他人は予定を作れない
 export const GAS_URL =
   "https://script.google.com/macros/s/AKfycbznpQSiJqLp9lEelheywucI6Qdpq9woYLxsVwj9Nb4n3O40tg2Z_bZ2T3UWlnfZt2I/exec";

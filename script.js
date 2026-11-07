@@ -178,16 +178,17 @@ async function sendToCalendar(title, dueDate) {
   if (!GAS_URL) return;
 
   try {
-    // ログイン中の通行証（アクセストークン）を送り、GAS が本人かどうかを Supabase に確かめる
-    const { data } = await supabase.auth.getSession();
-    const token = data.session ? data.session.access_token : "";
-    if (!token) throw new Error("ログインし直してください");
+    // 合言葉は、ログインした本人の Supabase のユーザー情報に入っている（本人しか読めない）
+    const { data, error } = await supabase.auth.getUser();
+    if (error) throw new Error("ログインし直してください");
+    const secret = (data.user.user_metadata || {}).gas_secret;
+    if (!secret) return; // 合言葉が設定されていないアカウントでは何もしない
 
     const response = await fetch(GAS_URL, {
       method: "POST",
       // text/plain にすると、ブラウザの事前確認（CORS）で止められない
       headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ title: title, date: dueDate || todayString(), token: token }),
+      body: JSON.stringify({ title: title, date: dueDate || todayString(), secret: secret }),
     });
     const result = (await response.text()).trim();
     if (!response.ok || result !== "ok") {
