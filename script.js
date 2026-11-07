@@ -47,7 +47,7 @@ function hideMessage() {
 async function loadEnv() {
   const response = await fetch("./.env", { cache: "no-store" });
   if (!response.ok) {
-    throw new Error(".env を読み込めませんでした");
+    throw new Error(`サーバーの返事 ${response.status}`);
   }
 
   const env = {};
@@ -323,7 +323,7 @@ async function start() {
     env = await loadEnv();
   } catch (error) {
     showMessage(
-      ".env を読み込めませんでした。フォルダの中の start.bat をダブルクリックして開いてください（または http://127.0.0.1:8000/ を開く）。",
+      ".env を読み込めませんでした（" + error.message + "）。フォルダの中の start.bat をダブルクリックして開いてください（または http://127.0.0.1:8000/ を開く）。",
       true
     );
     return;
